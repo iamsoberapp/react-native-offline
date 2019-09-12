@@ -32,10 +32,12 @@ function handleOfflineAction(
       typeof actionToLookUp === 'object'
         ? { ...actionToLookUp, meta }
         : actionToLookUp;
-    const similarActionQueued = getSimilarActionInQueue(
-      actionWithMetaData,
-      state.actionQueue,
-    );
+//    const similarActionQueued = getSimilarActionInQueue(
+//      actionWithMetaData,
+//      state.actionQueue,
+//    );
+
+    const similarActionQueued = false;
 
     return {
       ...state,
