@@ -70,18 +70,12 @@ function didComeBackOnline(action, wasConnected) {
   );
 }
 
-export const createReleaseQueue = (getState, next, delay) => async queue => {
-  // eslint-disable-next-line
-  for (const action of queue) {
-    const { isConnected } = getState().network;
-    if (isConnected) {
-      next(removeActionFromQueue(action));
-      next(action);
-      // eslint-disable-next-line
-      await wait(delay);
-    } else {
-      break;
-    }
+const createReleaseQueue = (getState, next) => queueItem => {
+  const { isConnected } = getState().network;
+
+  if (isConnected) {
+    next(removeActionFromQueue(queueItem));
+    next(queueItem);
   }
 };
 
@@ -96,8 +90,7 @@ function createNetworkMiddleware({
     const { isConnected, actionQueue } = getState().network;
     const releaseQueue = createReleaseQueue(
       getState,
-      next,
-      queueReleaseThrottle,
+      next
     );
     validateParams(regexActionType, actionTypes);
 
@@ -113,13 +106,6 @@ function createNetworkMiddleware({
       return next(fetchOfflineMode(action));
     }
 
-    const isBackOnline = didComeBackOnline(action, isConnected);
-    if (isBackOnline) {
-      // Dispatching queued actions in order of arrival (if we have any)
-      next(action);
-      return releaseQueue(actionQueue);
-    }
-
     // Checking if we have a dismissal case
     const isAnyActionToBeDismissed = findActionToBeDismissed(
       action,
@@ -127,6 +113,24 @@ function createNetworkMiddleware({
     );
     if (isAnyActionToBeDismissed && !isConnected) {
       next(dismissActionsFromQueue(action.type));
+    }
+
+    if (isConnected === true && actionQueue.length > 0) {
+      console.log(`Processing next item from the action queue: actionQueueSize=${actionQueue.length}`);
+
+      // Process the next queued action FIFO-style.
+      releaseQueue(getState().network.actionQueue[0]);
+
+      // Enqueue the current, interceptable action. It will be
+      // processed after all currently enqueued actions have
+      // been processed.
+      if (shouldInterceptAction) {
+        return next(fetchOfflineMode(action));
+      }
+      // Process the current, non-interceptable action.
+      else {
+        return next(action);
+      }
     }
 
     // Proxy the original action to the next middleware on the chain or final dispatch
