@@ -116,7 +116,7 @@ function createNetworkMiddleware({
     }
 
     if (isConnected === true && actionQueue.length > 0) {
-      console.log(`Queueing action while queue is draining: actionQueueSize=${actionQueue.length}`);
+      console.log(`Processing next item from the action queue: actionQueueSize=${actionQueue.length}`);
 
       // Process the next queued action FIFO-style.
       releaseQueue(getState().network.actionQueue[0]);
