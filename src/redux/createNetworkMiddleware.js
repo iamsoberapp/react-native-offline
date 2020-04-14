@@ -115,7 +115,9 @@ function createNetworkMiddleware({
       next(dismissActionsFromQueue(action.type));
     }
 
-    if (isConnected === true && actionQueue.length > 0) {
+    const authenticated = getState()?.auth?.api?.state === "AUTHENTICATED";
+
+    if (authenticated === true && isConnected === true && actionQueue.length > 0) {
       console.log(`Processing next item from the action queue: actionQueueSize=${actionQueue.length}`);
 
       // Process the next queued action FIFO-style.
