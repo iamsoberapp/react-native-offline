@@ -37,6 +37,7 @@ export const fetchOfflineMode = (
       prevThunk: action,
     },
     meta,
+    kind: "failed"
   };
 };
 
