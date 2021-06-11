@@ -52,6 +52,27 @@ function handleOfflineAction(
   return state;
 }
 
+function handleIncrementRetryableThunkAttempt(state: NetworkState): NetworkState {
+  if (state.actionQueue.length === 0) {
+    return { ...state };
+  }
+
+  const attempt = state.attempt ?? 0;
+
+  return {
+    ...state,
+    attempt: attempt + 1
+  };
+}
+
+function handleRemoveHeadFromQueue(state: NetworkState): NetworkState {
+  return {
+    ...state,
+    actionQueue: state.actionQueue.slice(1),
+    attempt: 0
+  };
+}
+
 function handleRemoveActionFromQueue(
   state: NetworkState,
   action: FluxActionForRemoval,
@@ -92,8 +113,12 @@ export default function(
         ...state,
         isConnected: action.payload,
       };
+    case actionTypes.INCREMENT_RETRYABLE_THUNK_ATTEMPT:
+      return handleIncrementRetryableThunkAttempt(state);
     case actionTypes.FETCH_OFFLINE_MODE:
       return handleOfflineAction(state, action);
+    case actionTypes.REMOVE_HEAD_FROM_ACTION_QUEUE:
+      return handleRemoveHeadFromQueue(state);
     case actionTypes.REMOVE_FROM_ACTION_QUEUE:
       return handleRemoveActionFromQueue(state, action.payload);
     case actionTypes.DISMISS_ACTIONS_FROM_QUEUE:

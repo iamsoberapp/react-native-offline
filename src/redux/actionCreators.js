@@ -41,6 +41,18 @@ export const fetchOfflineMode = (
   };
 };
 
+export const incrementRetryableThunkAttempt = (
+): FluxActionForRemoval => ({
+  type: actionTypes.INCREMENT_RETRYABLE_THUNK_ATTEMPT,
+  payload: {},
+});
+
+export const removeHeadFromQueue = (
+): FluxActionForRemoval => ({
+  type: actionTypes.REMOVE_HEAD_FROM_ACTION_QUEUE,
+  payload: {},
+});
+
 export const removeActionFromQueue = (
   action: EnqueuedAction,
 ): FluxActionForRemoval => ({

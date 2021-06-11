@@ -2,13 +2,16 @@
 
 import { find, get } from 'lodash';
 import {
+  connectionChange,
   fetchOfflineMode,
-  removeActionFromQueue,
+  incrementRetryableThunkAttempt,
+  removeHeadFromQueue,
   dismissActionsFromQueue,
 } from './actionCreators';
 import type { NetworkState } from '../types';
 import networkActionTypes from './actionTypes';
 import wait from '../utils/wait';
+import crashlytics from "@react-native-firebase/crashlytics";
 
 type MiddlewareAPI<S> = {
   dispatch: (action: any) => void,
@@ -24,6 +27,8 @@ type Arguments = {|
   actionTypes: Array<string>,
   queueReleaseThrottle: number,
 |};
+
+let promise = Promise.resolve();
 
 function validateParams(regexActionType, actionTypes) {
   if ({}.toString.call(regexActionType) !== '[object RegExp]')
@@ -62,22 +67,94 @@ function checkIfActionShouldBeIntercepted(
   );
 }
 
-function didComeBackOnline(action, wasConnected) {
-  return (
-    action.type === networkActionTypes.CONNECTION_CHANGE &&
-    !wasConnected &&
-    action.payload === true
-  );
+function shouldWorkNextQueueItem(getState) {
+  if (getState().network.isConnected !== true) {
+    return false;
+  }
+
+  if (getState().network.actionQueue.length === 0) {
+    return false;
+  }
+
+  return true;
 }
 
-const createReleaseQueue = (getState, next) => queueItem => {
-  const { isConnected } = getState().network;
+function recordCrashlyticsError(error) {
+  try {
+    let errorToRecord = null;
 
-  if (isConnected) {
-    next(removeActionFromQueue(queueItem));
-    next(queueItem);
+    if (error instanceof Error) {
+      errorToRecord = error;
+    } else {
+      errorToRecord = Error(String(error));
+    }
+
+    crashlytics().recordError(errorToRecord, "Data Sync: workNextQueueItem()");
+  } catch (unexpectedError) {
+    console.log("recordCrashlyticsError() unexpected error", unexpectedError);
   }
-};
+}
+
+const workNextQueueItem = (getState, next) => {
+  if (shouldWorkNextQueueItem(getState) !== true) {
+    return;
+  }
+
+  promise = promise
+    .then(() => {
+      if (shouldWorkNextQueueItem(getState) !== true) {
+        return;
+      }
+
+      next(incrementRetryableThunkAttempt());
+
+      const queueItem = getState().network.actionQueue[0];
+      const retryableThunk = next(queueItem);
+
+      console.log("workNextQueueItem() working queue item", queueItem.meta);
+
+      if (retryableThunk.kind !== "result") {
+        console.log("workNextQueueItem() invalid retryableThunk ", retryableThunk);
+        next(removeHeadFromQueue());
+        workNextQueueItem(getState, next);
+        return;
+      }
+
+      return retryableThunk.result
+        .then(res => {
+          console.log("workNextQueueItem() sync operation complete ", res);
+          next(connectionChange(true));
+          next(removeHeadFromQueue());
+          workNextQueueItem(getState, next);
+        })
+        .catch(error => {
+          // A network error flips the network connected flag to false. Queue items
+          // will accumulate and not be worked until this flag transitions back to
+          // true.
+          if (error?.kind === "fetch-api-error" || error?.kind === "fetch-fatal-error") {
+            console.log("workNextQueueItem() sync operation api error, will retry", error);
+            next(connectionChange(false));
+          } else {
+            // This is an unexpected case. An error here would originate from code
+            // running against the source Promise API call. For instance, if `then()`
+            // code processing a successful API response threw an error.
+            console.log("workNextQueueItem() sync operation unexpexcted error", error);
+            recordCrashlyticsError(error);
+            next(removeHeadFromQueue());
+            workNextQueueItem(getState, next);
+          }
+        });
+    })
+    .catch(error => {
+      // This is an unexpected case. An error here would originate from the
+      // RetryableThunk before a Promise API call was created. For example,
+      // code preparing the API request threw an error.
+      console.log("workNextQueueItem() unexpected error", error);
+      recordCrashlyticsError(error);
+      next(removeHeadFromQueue());
+      workNextQueueItem(getState, next);
+    });
+}
 
 function createNetworkMiddleware({
   regexActionType = /FETCH.*REQUEST/,
@@ -88,10 +165,6 @@ function createNetworkMiddleware({
     next: (action: any) => void,
   ) => (action: any) => {
     const { isConnected, actionQueue } = getState().network;
-    const releaseQueue = createReleaseQueue(
-      getState,
-      next
-    );
     validateParams(regexActionType, actionTypes);
 
     const shouldInterceptAction = checkIfActionShouldBeIntercepted(
@@ -100,11 +173,6 @@ function createNetworkMiddleware({
       actionTypes,
     );
 
-    if (shouldInterceptAction && isConnected === false) {
-      // Offline, preventing the original action from being dispatched.
-      // Dispatching an internal action instead.
-      return next(fetchOfflineMode(action));
-    }
 
     // Checking if we have a dismissal case
     const isAnyActionToBeDismissed = findActionToBeDismissed(
@@ -115,28 +183,21 @@ function createNetworkMiddleware({
       next(dismissActionsFromQueue(action.type));
     }
 
-    const authenticated = getState()?.auth?.api?.state === "AUTHENTICATED";
+    let result;
 
-    if (authenticated === true && isConnected === true && actionQueue.length > 0) {
-      console.log(`Processing next item from the action queue: actionQueueSize=${actionQueue.length}`);
-
-      // Process the next queued action FIFO-style.
-      releaseQueue(getState().network.actionQueue[0]);
-
-      // Enqueue the current, interceptable action. It will be
-      // processed after all currently enqueued actions have
-      // been processed.
-      if (shouldInterceptAction) {
-        return next(fetchOfflineMode(action));
-      }
-      // Process the current, non-interceptable action.
-      else {
-        return next(action);
-      }
+    if (shouldInterceptAction) {
+      result = next(fetchOfflineMode(action));
+    } else {
+      result = next(action);
     }
 
-    // Proxy the original action to the next middleware on the chain or final dispatch
-    return next(action);
+    const authenticated = getState()?.auth?.api?.state === "AUTHENTICATED";
+
+    if (authenticated === true && isConnected === true && getState().network.actionQueue.length > 0) {
+      workNextQueueItem(getState, next);
+    }
+
+    return result;
   };
 }
 
