@@ -7,7 +7,7 @@ import {
 } from './constants';
 
 type Options = {
-  method?: 'HEAD' | 'OPTIONS',
+  method?: 'HEAD' | 'OPTIONS' | 'GET',
   url: string,
   timeout?: number,
   testMethod?:

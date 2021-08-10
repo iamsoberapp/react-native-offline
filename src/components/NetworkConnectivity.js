@@ -52,8 +52,8 @@ function validateProps(props: Props) {
   if (typeof props.pingInBackground !== 'boolean') {
     throw new Error('you should pass a string as pingServerUrl parameter');
   }
-  if (!['HEAD', 'OPTIONS'].includes(props.httpMethod)) {
-    throw new Error('httpMethod parameter should be either HEAD or OPTIONS');
+  if (!['HEAD', 'OPTIONS', 'GET'].includes(props.httpMethod)) {
+    throw new Error('httpMethod parameter should be either HEAD, OPTIONS or GET');
   }
 }
 
