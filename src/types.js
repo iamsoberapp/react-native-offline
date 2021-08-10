@@ -40,4 +40,4 @@ export type NetworkState = {
   actionQueue: Array<*>,
 };
 
-export type HTTPMethod = 'HEAD' | 'OPTIONS';
+export type HTTPMethod = 'HEAD' | 'OPTIONS' | 'GET';

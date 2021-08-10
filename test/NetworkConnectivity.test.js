@@ -406,7 +406,7 @@ describe('NetworkConnectivity', () => {
       ).toThrow('you should pass a string as pingServerUrl parameter');
     });
 
-    it('throws if prop httpMethod is not either HEAD or OPTIONS', () => {
+    it('throws if prop httpMethod is not either HEAD, OPTIONS or GET', () => {
       expect(() =>
         // $FlowFixMe
         render(
@@ -414,7 +414,7 @@ describe('NetworkConnectivity', () => {
             props: { httpMethod: 'POST', children: ChildrenComponent },
           }),
         ),
-      ).toThrow('httpMethod parameter should be either HEAD or OPTIONS');
+      ).toThrow('httpMethod parameter should be either HEAD, OPTIONS or GET');
     });
 
     it('throws if prop onConnectivityChange is not a function', () => {
